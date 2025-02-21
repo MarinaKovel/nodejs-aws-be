@@ -8,7 +8,7 @@ const products: Product[] = [
 
 export const getProductsById = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   console.log('Event:', JSON.stringify(event, null, 2));
-  
+
   try {
     const productId = event.pathParameters?.id;
     const product = products.find(p => p.id === productId);
