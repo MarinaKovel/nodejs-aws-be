@@ -11,6 +11,19 @@ export const getProductsById = async (event: APIGatewayProxyEvent): Promise<APIG
 
   try {
     const productId = event.pathParameters?.id;
+    console.log('Looking for product with ID:', productId);
+
+    if (!productId) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ message: 'Product ID is required' }),
+      };
+    }
+
     const product = products.find(p => p.id === productId);
 
     if (!product) {
@@ -44,4 +57,3 @@ export const getProductsById = async (event: APIGatewayProxyEvent): Promise<APIG
     };
   }
 };
-
