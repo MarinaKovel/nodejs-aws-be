@@ -7,7 +7,8 @@
     "test": "jest",
     "cdk": "cdk",
     "deploy": "cdk deploy",
-    "destroy": "cdk destroy"
+    "destroy": "cdk destroy",
+    "test:coverage": "jest --coverage"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.92",
