@@ -1,12 +1,14 @@
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, ScanCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { Product } from '../src/types/product';
 import { Stock } from '../src/types/stock';
 import { productsData } from './productsData';
 
-const dynamodb = new DynamoDB.DocumentClient({
+const client = new DynamoDBClient({
   region: process.env.AWS_REGION || 'eu-central-1'
 });
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 // Table names
 const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE || 'products';
@@ -19,35 +21,35 @@ async function clearTables(): Promise<void> {
   console.log('Clearing existing data from tables...');
   
   try {
-    const productsResult = await dynamodb.scan({
+    const productsResult = await dynamodb.send(new ScanCommand({
       TableName: PRODUCTS_TABLE,
       AttributesToGet: ['id']
-    }).promise();
+    }));
     
     if (productsResult.Items && productsResult.Items.length > 0) {
       console.log(`Deleting ${productsResult.Items.length} products...`);
       
       for (const item of productsResult.Items) {
-        await dynamodb.delete({
+        await dynamodb.send(new DeleteCommand({
           TableName: PRODUCTS_TABLE,
           Key: { id: item.id }
-        }).promise();
+        }));
       }
     }
     
-    const stocksResult = await dynamodb.scan({
+    const stocksResult = await dynamodb.send(new ScanCommand({
       TableName: STOCKS_TABLE,
       AttributesToGet: ['product_id']
-    }).promise();
+    }));
     
     if (stocksResult.Items && stocksResult.Items.length > 0) {
       console.log(`Deleting ${stocksResult.Items.length} stocks...`);
       
       for (const item of stocksResult.Items) {
-        await dynamodb.delete({
+        await dynamodb.send(new DeleteCommand({
           TableName: STOCKS_TABLE,
           Key: { product_id: item.product_id }
-        }).promise();
+        }));
       }
     }
     
@@ -83,19 +85,19 @@ async function populateTables(): Promise<void> {
     
     console.log(`Adding ${products.length} products...`);
     for (const product of products) {
-      await dynamodb.put({
+      await dynamodb.send(new PutCommand({
         TableName: PRODUCTS_TABLE,
         Item: product
-      }).promise();
+      }));
       console.log(`Added product: ${product.title} (ID: ${product.id})`);
     }
     
     console.log(`Adding ${stocks.length} stocks...`);
     for (const stock of stocks) {
-      await dynamodb.put({
+      await dynamodb.send(new PutCommand({
         TableName: STOCKS_TABLE,
         Item: stock
-      }).promise();
+      }));
       console.log(`Added stock for product ID: ${stock.product_id}, Count: ${stock.count}`);
     }
     
