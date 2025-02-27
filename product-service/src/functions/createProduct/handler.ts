@@ -1,6 +1,10 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  TransactWriteCommand,
+  TransactWriteCommandInput
+} from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { ProductRequest } from '../../types/product';
 
@@ -15,7 +19,7 @@ const headers = {
 
 export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   console.log('Event received:', JSON.stringify(event));
-  
+
   try {
     if (!event.body) {
       return {
@@ -42,28 +46,28 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ 
-          message: 'Missing required fields. Please provide title, description, price, and count.' 
+        body: JSON.stringify({
+          message: 'Missing required fields. Please provide title, description, price, and count.'
         }),
       };
     }
 
-    if (typeof productData.title !== 'string' || 
-        typeof productData.description !== 'string' || 
-        typeof productData.price !== 'number' || 
-        typeof productData.count !== 'number') {
+    if (typeof productData.title !== 'string' ||
+      typeof productData.description !== 'string' ||
+      typeof productData.price !== 'number' ||
+      typeof productData.count !== 'number') {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ 
-          message: 'Invalid data types. Title and description must be strings, price and count must be numbers.' 
+        body: JSON.stringify({
+          message: 'Invalid data types. Title and description must be strings, price and count must be numbers.'
         }),
       };
     }
 
     const productId = uuidv4();
     console.log('Generated product ID:', productId);
-    const {title, description, price, count} = productData;
+    const { title, description, price, count } = productData;
 
     const product = {
       id: productId,
@@ -77,17 +81,27 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
       count
     };
 
-    console.log('Saving product to DynamoDB:', product);
-    await dynamodb.send(new PutCommand({
-      TableName: productsTable,
-      Item: product
-    }));
+    // If one of the operations fails (add item in products+stocks) the transaction will be canceled
+    const transactParams: TransactWriteCommandInput = {
+      TransactItems: [
+        {
+          Put: {
+            TableName: productsTable,
+            Item: product
+          }
+        },
+        {
+          Put: {
+            TableName: stocksTable,
+            Item: stock
+          }
+        }
+      ]
+    };
 
-    console.log('Saving stock to DynamoDB:', stock);
-    await dynamodb.send(new PutCommand({
-      TableName: stocksTable,
-      Item: stock
-    }));
+    console.log('Executing transaction:', JSON.stringify(transactParams));
+    await dynamodb.send(new TransactWriteCommand(transactParams));
+    console.log('Transaction completed successfully');
 
     const createdProduct = {
       ...product,
@@ -101,10 +115,24 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
     };
   } catch (error: unknown) {
     console.error('Error creating product:', error);
-    
+
+    if (error instanceof Error) {
+      if (error.name === 'TransactionCanceledException') {
+        console.error('Transaction was cancelled. One or more conditions were not met.');
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            message: 'Transaction failed. The product or stock may already exist.',
+            error: error.message
+          }),
+        };
+      }
+    }
+
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     console.error('Error details:', errorMessage);
-    
+
     return {
       statusCode: 500,
       headers,
