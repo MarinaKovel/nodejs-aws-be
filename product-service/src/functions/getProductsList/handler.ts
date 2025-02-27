@@ -14,22 +14,26 @@ const headers = {
 }
 
 export const getProductsList = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  console.log('Event:', JSON.stringify(event));
+
   try {
-    // Get all products
+    console.log('Fetching all products');
     const productsResult = await dynamodb.send(new ScanCommand({
       TableName: productsTable,
     }));
 
     const products: Product[] = productsResult.Items as Product[] || [];
+    console.log('Products fetched', products.length);
 
-    // Get all stocks
+    console.log('Fetching all stocks');
     const stocksResult = await dynamodb.send(new ScanCommand({
       TableName: stocksTable,
     }));
 
     const stocks: Stock[] = stocksResult.Items as Stock[] || [];
+    console.log('Products fetched', stocks.length);
 
-    // Join products with stocks
+    console.log('Joining products with stocks');
     const joinedProducts = products.map(product => {
       const stock = stocks.find(s => s.product_id === product.id) || { count: 0 };
       const { id, title, description, price } = product;
@@ -42,13 +46,15 @@ export const getProductsList = async (event: APIGatewayProxyEvent): Promise<APIG
       };
     });
 
+    console.log('Returning joined products', joinedProducts.length);
+
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify(joinedProducts),
     };
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error fetching products:', error);
     return {
       statusCode: 500,
       headers,
