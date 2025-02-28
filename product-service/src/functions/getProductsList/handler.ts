@@ -3,6 +3,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { Product } from '../../types/product';
 import { Stock } from '../../types/stock';
+import { logger } from '../../utils/powertools';
 
 const client = new DynamoDBClient();
 const dynamodb = DynamoDBDocumentClient.from(client);
@@ -14,26 +15,32 @@ const headers = {
 }
 
 export const getProductsList = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  console.log('Event:', JSON.stringify(event));
+  logger.info('Request received', {
+    path: event.path,
+    httpMethod: event.httpMethod,
+    pathParameters: event.pathParameters,
+    queryStringParameters: event.queryStringParameters,
+    body: event.body ? JSON.parse(event.body) : null
+  });
 
   try {
-    console.log('Fetching all products');
+    logger.info('Fetching all products');
     const productsResult = await dynamodb.send(new ScanCommand({
       TableName: productsTable,
     }));
 
     const products: Product[] = productsResult.Items as Product[] || [];
-    console.log('Products fetched', products.length);
+    logger.info('Products fetched', { products });
 
-    console.log('Fetching all stocks');
+    logger.info('Fetching all stocks');
     const stocksResult = await dynamodb.send(new ScanCommand({
       TableName: stocksTable,
     }));
 
     const stocks: Stock[] = stocksResult.Items as Stock[] || [];
-    console.log('Products fetched', stocks.length);
+    logger.info('Products fetched', { stocks });
 
-    console.log('Joining products with stocks');
+    logger.info('Joining products with stocks');
     const joinedProducts = products.map(product => {
       const stock = stocks.find(s => s.product_id === product.id) || { count: 0 };
       const { id, title, description, price } = product;
@@ -46,7 +53,7 @@ export const getProductsList = async (event: APIGatewayProxyEvent): Promise<APIG
       };
     });
 
-    console.log('Returning joined products', joinedProducts.length);
+    logger.info('Returning joined products', { joinedProducts });
 
     return {
       statusCode: 200,
@@ -54,7 +61,7 @@ export const getProductsList = async (event: APIGatewayProxyEvent): Promise<APIG
       body: JSON.stringify(joinedProducts),
     };
   } catch (error) {
-    console.error('Error fetching products:', error);
+    logger.error('Error fetching products:', { error });
     return {
       statusCode: 500,
       headers,

@@ -7,6 +7,8 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { ProductRequest } from '../../types/product';
+import { logger, metrics } from '../../utils/powertools';
+import { MetricUnit } from '@aws-lambda-powertools/metrics';
 
 const client = new DynamoDBClient();
 const dynamodb = DynamoDBDocumentClient.from(client);
@@ -18,7 +20,15 @@ const headers = {
 };
 
 export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  console.log('Event received:', JSON.stringify(event));
+  logger.info('Request received', {
+    path: event.path,
+    httpMethod: event.httpMethod,
+    pathParameters: event.pathParameters,
+    queryStringParameters: event.queryStringParameters,
+    body: event.body ? JSON.parse(event.body) : null
+  });
+
+  metrics.addMetric('createProductInvocation', MetricUnit.Count, 1);
 
   try {
     if (!event.body) {
@@ -32,9 +42,9 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
     let productData: ProductRequest;
     try {
       productData = JSON.parse(event.body);
-      console.log('Parsed product data:', productData);
+      logger.info('Parsed product data:', { productData });
     } catch (error) {
-      console.error('Error parsing request body:', error);
+      logger.error('Error parsing request body:', { error });
       return {
         statusCode: 400,
         headers,
@@ -66,7 +76,7 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
     }
 
     const productId = uuidv4();
-    console.log('Generated product ID:', productId);
+    logger.info('Generated product ID:', productId);
     const { title, description, price, count } = productData;
 
     const product = {
@@ -81,7 +91,7 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
       count
     };
 
-    // If one of the operations fails (add item in products+stocks) the transaction will be canceled
+    // Transaction based creation of product: If one of the operations fails (add item in products DB or stocks DB), the transaction will be canceled
     const transactParams: TransactWriteCommandInput = {
       TransactItems: [
         {
@@ -99,14 +109,16 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
       ]
     };
 
-    console.log('Executing transaction:', JSON.stringify(transactParams));
+    logger.info('Executing transaction:', JSON.stringify(transactParams));
     await dynamodb.send(new TransactWriteCommand(transactParams));
-    console.log('Transaction completed successfully');
+    logger.info('Transaction completed successfully');
 
     const createdProduct = {
       ...product,
       count: stock.count
     };
+
+    metrics.addMetric('createProductSuccess', MetricUnit.Count, 1);
 
     return {
       statusCode: 201,
@@ -114,11 +126,12 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
       body: JSON.stringify(createdProduct),
     };
   } catch (error: unknown) {
-    console.error('Error creating product:', error);
-
     if (error instanceof Error) {
+      logger.error('Error creating product:', { error });
+      metrics.addMetric('createProductFailure', MetricUnit.Count, 1);
+
       if (error.name === 'TransactionCanceledException') {
-        console.error('Transaction was cancelled. One or more conditions were not met.');
+        logger.error('Transaction was cancelled. One or more conditions were not met.');
         return {
           statusCode: 400,
           headers,
@@ -131,12 +144,14 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
     }
 
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    console.error('Error details:', errorMessage);
+    logger.error('Error details:', errorMessage);
 
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({ message: 'Internal server error', error: errorMessage }),
     };
+  } finally {
+    metrics.publishStoredMetrics();
   }
 };
