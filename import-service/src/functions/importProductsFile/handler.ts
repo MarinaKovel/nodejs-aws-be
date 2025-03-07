@@ -4,6 +4,10 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const BUCKET_NAME = process.env.BUCKET_NAME || 'aws-be-import-service-bucket';
 const REGION = process.env.REGION || 'eu-central-1';
+const headers = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Credentials': true,
+}
 
 const s3Client = new S3Client({ region: REGION });
 
@@ -14,10 +18,7 @@ export const importProductsFile = async (event: APIGatewayProxyEvent): Promise<A
     if (!fileName) {
       return {
         statusCode: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Credentials': true,
-        },
+        headers,
         body: JSON.stringify({ message: 'File name is required' }),
       };
     }
@@ -33,20 +34,14 @@ export const importProductsFile = async (event: APIGatewayProxyEvent): Promise<A
 
     return {
       statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Credentials': true,
-      },
-      body: signedUrl,
+      headers,
+      body: JSON.stringify(signedUrl),
     };
   } catch (error) {
     console.error('Error generating signed URL:', error);
     return {
       statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Credentials': true,
-      },
+      headers,
       body: JSON.stringify({ message: 'Error generating signed URL' }),
     };
   }
