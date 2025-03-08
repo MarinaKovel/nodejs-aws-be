@@ -11,6 +11,7 @@
     "build:scripts": "tsc -p tsconfig.json"
   },
   "devDependencies": {
+    "@aws-sdk/util-stream": "^3.374.0",
     "@types/aws-lambda": "^8.10.92",
     "@types/jest": "^29.5.14",
     "@types/node": "22.7.9",
