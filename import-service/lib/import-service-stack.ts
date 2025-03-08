@@ -47,7 +47,7 @@ export class ImportServiceStack extends cdk.Stack {
 
     // Grant S3 permissions to the Lambda function
     bucket.grantReadWrite(importProductsFileLambda);
-    bucket.grantRead(importFileParserFunction);
+    bucket.grantReadWrite(importFileParserFunction);
 
     // Create API Gateway
     const api = new apigateway.RestApi(this, 'ImportApi', {
