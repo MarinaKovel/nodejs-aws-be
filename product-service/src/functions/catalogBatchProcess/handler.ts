@@ -2,6 +2,7 @@ import { SQSEvent } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { logger } from '../../utils/powertools';
+import { v4 as uuidv4 } from 'uuid';
 
 const client = new DynamoDBClient();
 const dynamodb = DynamoDBDocumentClient.from(client);
@@ -13,30 +14,50 @@ export const catalogBatchProcess = async (event: SQSEvent) => {
     logger.info('Processing SQS messages', { recordCount: event.Records.length });
 
     for (const record of event.Records) {
-      const productData = JSON.parse(record.body);
-      logger.info('Processing product:', { productData });
+      let productData;
 
-      // Create product in products table
-      await dynamodb.send(new PutCommand({
-        TableName: productsTable,
-        Item: {
-          id: productData.id,
-          title: productData.title,
-          description: productData.description,
-          price: productData.price
+      try {
+        if (typeof record.body !== 'string') {
+          throw new Error('Record body is not a string');
         }
-      }));
 
-      // Create stock in stocks table
-      await dynamodb.send(new PutCommand({
-        TableName: stocksTable,
-        Item: {
-          product_id: productData.id,
-          count: productData.count
+        productData = JSON.parse(record.body);
+
+        if (!productData.id || !productData.title ||
+          typeof productData.price !== 'number' ||
+          typeof productData.count !== 'number') {
+          throw new Error('Invalid product data structure');
         }
-      }));
 
-      logger.info('Successfully created product and stock:', { productId: productData.id });
+        const productId = uuidv4();
+
+        logger.info('Processing product:', { productData, productId });
+
+        // Create product in products table
+        await dynamodb.send(new PutCommand({
+          TableName: productsTable,
+          Item: {
+            id: productId,
+            title: productData.title,
+            description: productData.description || '',
+            price: productData.price
+          }
+        }));
+
+        // Create stock in stocks table
+        await dynamodb.send(new PutCommand({
+          TableName: stocksTable,
+          Item: {
+            product_id: productId,
+            count: productData.count
+          }
+        }));
+
+        logger.info('Successfully created product and stock:', { productId: productData.id });
+      } catch (e) {
+        logger.error('Error processing individual record:', { error: e, record: record.body });
+        continue;
+      }
     }
 
     return {

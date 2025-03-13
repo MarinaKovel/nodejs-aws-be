@@ -27,7 +27,6 @@ export class ProductServiceStack extends cdk.Stack {
     // Create SQS Queue
     const catalogItemsQueue = new sqs.Queue(this, 'CatalogItemsQueue', {
       queueName: 'catalogItemsQueue',
-      //visibilityTimeout: cdk.Duration.seconds(30), // Should be at least 6x the function timeout
     });
 
     // Define the Lambda function using NodejsFunction
