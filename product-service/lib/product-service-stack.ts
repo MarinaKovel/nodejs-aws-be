@@ -7,6 +7,8 @@ import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
 export class ProductServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -22,6 +24,16 @@ export class ProductServiceStack extends cdk.Stack {
       this,
       'ExistingStocksTable',
       'stocks'
+    );
+
+    // Create SNS Topic
+    const createProductTopic = new sns.Topic(this, 'CreateProductTopic', {
+      topicName: 'createProductTopic',
+    });
+
+    // Add email subscription
+    createProductTopic.addSubscription(
+      new subscriptions.EmailSubscription('m.kovel@softteco.com')
     );
 
     // Create SQS Queue
@@ -90,6 +102,7 @@ export class ProductServiceStack extends cdk.Stack {
         sourceMap: true,
       },
       environment: {
+        SNS_TOPIC_ARN: createProductTopic.topicArn,
         PRODUCTS_TABLE: productsTable.tableName,
         STOCKS_TABLE: stocksTable.tableName,
       },
@@ -109,6 +122,7 @@ export class ProductServiceStack extends cdk.Stack {
     stocksTable.grantWriteData(createProductFunction);
     productsTable.grantWriteData(catalogBatchProcess);
     stocksTable.grantWriteData(catalogBatchProcess);
+    createProductTopic.grantPublish(catalogBatchProcess);
     catalogItemsQueue.grantConsumeMessages(catalogBatchProcess);
 
     // Create API Gateway
