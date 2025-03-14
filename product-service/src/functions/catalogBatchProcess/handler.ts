@@ -23,7 +23,7 @@ export const catalogBatchProcess = async (event: SQSEvent) => {
 
         productData = JSON.parse(record.body);
 
-        if (!productData.id || !productData.title ||
+        if (!productData.title ||
           typeof productData.price !== 'number' ||
           typeof productData.count !== 'number') {
           throw new Error('Invalid product data structure');
