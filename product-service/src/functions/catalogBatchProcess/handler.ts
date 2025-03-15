@@ -57,24 +57,33 @@ export const catalogBatchProcess = async (event: SQSEvent) => {
         }));
 
         logger.info('Successfully created product and stock:', { productId: productData.id });
+
+        try {
+          await sns.send(new PublishCommand({
+            TopicArn: topicArn,
+            Message: JSON.stringify({
+              message: `Product created: ${productData.title}`,
+              product: productData
+            }),
+            MessageAttributes: {
+              price: {
+                DataType: 'Number',
+                StringValue: productData.price.toString()
+              }
+            }
+          }));
+  
+          logger.info('SNS notification sent successfully');
+  
+        } catch (error) {
+          logger.error('Error sending SNS notification:', { error });
+        }
       } catch (e) {
         logger.error('Error processing individual record:', { error: e, record: record.body });
 
         continue;
       }
     }
-
-    const message = {
-      subject: 'Products Created Successfully',
-      message: `Successfully created ${event.Records.length} products`,
-      products: event.Records,
-    };
-
-    await sns.send(new PublishCommand({
-      TopicArn: 'arn:aws:sns:eu-central-1:202533518997:createProductTopic',
-      Message: JSON.stringify(message, null, 2),
-      Subject: 'New Products Created',
-    }));
 
     return {
       statusCode: 200,

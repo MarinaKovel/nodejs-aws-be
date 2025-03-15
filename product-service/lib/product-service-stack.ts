@@ -9,6 +9,7 @@ import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import { FilterOrPolicy } from 'aws-cdk-lib/aws-sns';
 
 export class ProductServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -33,7 +34,24 @@ export class ProductServiceStack extends cdk.Stack {
 
     // Add email subscription
     createProductTopic.addSubscription(
-      new subscriptions.EmailSubscription('m.kovel@softteco.com')
+      new subscriptions.EmailSubscription('m.kovel@softteco.com', {
+        filterPolicy: {
+          price: sns.SubscriptionFilter.numericFilter({
+            greaterThanOrEqualTo: 50,
+          }),
+        },
+        json: false,
+      })
+    );
+    createProductTopic.addSubscription(
+      new subscriptions.EmailSubscription('waveee@gmail.com', {
+        filterPolicy: {
+          price: sns.SubscriptionFilter.numericFilter({
+            lessThan: 50,
+          }),
+        },
+        json: false,
+      })
     );
 
     // Create SQS Queue
