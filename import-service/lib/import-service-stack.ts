@@ -6,6 +6,8 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as path from 'path';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as iam from 'aws-cdk-lib/aws-iam';
 
 export class ImportServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -13,6 +15,33 @@ export class ImportServiceStack extends cdk.Stack {
 
     // Reference existing S3 bucket
     const bucket = s3.Bucket.fromBucketName(this, 'ImportBucket', 'aws-be-import-service-bucket');
+
+    // Reference the existing SQS queue
+    const catalogItemsQueue = sqs.Queue.fromQueueArn(
+      this,
+      'CatalogItemsQueue',
+      `arn:aws:sqs:eu-central-1:202533518997:catalogItemsQueue`
+    );
+
+    // Create policy
+    const rootUserPolicy = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'sqs:SendMessage',
+        'sqs:ReceiveMessage',
+        'sqs:DeleteMessage',
+        'sqs:GetQueueAttributes',
+        'sqs:GetQueueUrl',
+        'sqs:ListQueues'
+      ],
+      resources: [catalogItemsQueue.queueArn],
+      principals: [
+        new iam.AccountRootPrincipal()
+      ]
+    });
+
+    // Add the policy to the queue
+    catalogItemsQueue.addToResourcePolicy(rootUserPolicy);
 
     const importProductsFileLambda = new NodejsFunction(this, 'ImportProductsFileFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
@@ -48,6 +77,15 @@ export class ImportServiceStack extends cdk.Stack {
     // Grant S3 permissions to the Lambda function
     bucket.grantReadWrite(importProductsFileLambda);
     bucket.grantReadWrite(importFileParserFunction);
+
+    // Grant SQS permissions to Lambda and user
+    importFileParserFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sqs:SendMessage'],
+        resources: [catalogItemsQueue.queueArn],
+      })
+    );
 
     // Create API Gateway
     const api = new apigateway.RestApi(this, 'ImportApi', {
