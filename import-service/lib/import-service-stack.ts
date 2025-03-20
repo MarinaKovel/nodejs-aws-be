@@ -9,12 +9,47 @@ import * as path from 'path';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 
+export interface ImportServiceProps extends cdk.StackProps {
+  stage?: string,
+  basicAuthorizer: string;
+}
+
 export class ImportServiceStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: ImportServiceProps) {
     super(scope, id, props);
 
     // Reference existing S3 bucket
     const bucket = s3.Bucket.fromBucketName(this, 'ImportBucket', 'aws-be-import-service-bucket');
+
+    // Reference the existing authorizer Lambda function
+    const authorizerFn = lambda.Function.fromFunctionArn(
+      this,
+      'BasicAuthorizer',
+      props.basicAuthorizer
+    );
+
+    // Create API Gateway
+    const api = new apigateway.RestApi(this, 'ImportApi', {
+      restApiName: 'Import Service',
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: [
+          'Content-Type',
+          'X-Amz-Date',
+          'Authorization',
+          'X-Api-Key',
+          'X-Amz-Security-Token',
+        ],
+      },
+    });
+
+    // Create Lambda authorizer
+    const authorizer = new apigateway.TokenAuthorizer(this, 'ImportApiAuthorizer', {
+      handler: authorizerFn,
+      identitySource: apigateway.IdentitySource.header('Authorization'),
+      resultsCacheTtl: cdk.Duration.seconds(0)
+    });
 
     // Reference the existing SQS queue
     const catalogItemsQueue = sqs.Queue.fromQueueArn(
@@ -87,22 +122,49 @@ export class ImportServiceStack extends cdk.Stack {
       })
     );
 
-    // Create API Gateway
-    const api = new apigateway.RestApi(this, 'ImportApi', {
-      restApiName: 'Import Service',
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS,
-      },
-    });
-
     // Create the /import resource
     const importResource = api.root.addResource('import');
-    importResource.addMethod('GET', new apigateway.LambdaIntegration(importProductsFileLambda), {
-      requestParameters: {
-        'method.request.querystring.name': true,
-      },
-    });
+    importResource.addMethod(
+      'GET',
+      new apigateway.LambdaIntegration(importProductsFileLambda, {
+        proxy: true,
+        integrationResponses: [
+          {
+            statusCode: '200',
+            responseParameters: {
+              'method.response.header.Access-Control-Allow-Origin': "'*'",
+            },
+          },
+        ],
+      }),
+      {
+        authorizer: authorizer,
+        authorizationType: apigateway.AuthorizationType.CUSTOM,
+        requestParameters: {
+          'method.request.querystring.name': true,
+        },
+        methodResponses: [
+          {
+            statusCode: '200',
+            responseParameters: {
+              'method.response.header.Access-Control-Allow-Origin': true,
+            },
+          },
+          { 
+            statusCode: '401',
+            responseParameters: {
+              'method.response.header.Access-Control-Allow-Origin': true,
+            },
+          },
+          { 
+            statusCode: '403',
+            responseParameters: {
+              'method.response.header.Access-Control-Allow-Origin': true,
+            },
+          },
+        ],
+      }
+    );
 
     // Add S3 event notification for the 'uploaded' folder
     bucket.addEventNotification(
