@@ -5,6 +5,11 @@ import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as path from 'path';
 import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import { FilterOrPolicy } from 'aws-cdk-lib/aws-sns';
 
 export class ProductServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -16,12 +21,43 @@ export class ProductServiceStack extends cdk.Stack {
       'ExistingProductsTable',
       'products'
     );
-
     const stocksTable = dynamodb.Table.fromTableName(
       this,
       'ExistingStocksTable',
       'stocks'
     );
+
+    // Create SNS Topic
+    const createProductTopic = new sns.Topic(this, 'CreateProductTopic', {
+      topicName: 'createProductTopic',
+    });
+
+    // Add email subscription
+    createProductTopic.addSubscription(
+      new subscriptions.EmailSubscription('m.kovel@softteco.com', {
+        filterPolicy: {
+          price: sns.SubscriptionFilter.numericFilter({
+            greaterThanOrEqualTo: 50,
+          }),
+        },
+        json: false,
+      })
+    );
+    createProductTopic.addSubscription(
+      new subscriptions.EmailSubscription('waveee@gmail.com', {
+        filterPolicy: {
+          price: sns.SubscriptionFilter.numericFilter({
+            lessThan: 50,
+          }),
+        },
+        json: false,
+      })
+    );
+
+    // Create SQS Queue
+    const catalogItemsQueue = new sqs.Queue(this, 'CatalogItemsQueue', {
+      queueName: 'catalogItemsQueue',
+    });
 
     // Define the Lambda function using NodejsFunction
     const getProductsFunction = new NodejsFunction(this, 'GetProductsFunction', {
@@ -72,6 +108,29 @@ export class ProductServiceStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
     });
 
+    // Create Lambda function
+    const catalogBatchProcess = new NodejsFunction(this, 'CatalogBatchProcess', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: 'catalogBatchProcess',
+      entry: path.join(__dirname, '../src/functions/catalogBatchProcess/handler.ts'),
+      timeout: cdk.Duration.seconds(30),
+      bundling: {
+        externalModules: [],
+        minify: true,
+        sourceMap: true,
+      },
+      environment: {
+        SNS_TOPIC_ARN: createProductTopic.topicArn,
+        PRODUCTS_TABLE: productsTable.tableName,
+        STOCKS_TABLE: stocksTable.tableName,
+      },
+    });
+
+    // Add SQS as event source for Lambda
+    catalogBatchProcess.addEventSource(new lambdaEventSources.SqsEventSource(catalogItemsQueue, {
+      batchSize: 5,
+    }));
+
     // Grant permissions to Lambda functions
     productsTable.grantReadData(getProductsFunction);
     stocksTable.grantReadData(getProductsFunction);
@@ -79,6 +138,10 @@ export class ProductServiceStack extends cdk.Stack {
     stocksTable.grantReadData(getProductByIdFunction);
     productsTable.grantWriteData(createProductFunction);
     stocksTable.grantWriteData(createProductFunction);
+    productsTable.grantWriteData(catalogBatchProcess);
+    stocksTable.grantWriteData(catalogBatchProcess);
+    createProductTopic.grantPublish(catalogBatchProcess);
+    catalogItemsQueue.grantConsumeMessages(catalogBatchProcess);
 
     // Create API Gateway
     const api = new apigateway.RestApi(this, 'ProductsApi', {
