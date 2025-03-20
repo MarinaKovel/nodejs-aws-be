@@ -1,17 +1,11 @@
 import * as cdk from 'aws-cdk-lib';
-import { AuthorizationService } from '../lib';
+import { AuthorizationServiceStack } from '../lib/authorization-service-stack';
 
 const app = new cdk.App();
 
-const stack = new cdk.Stack(app, 'AuthorizationServiceStack', {
-  env: { 
-    region: process.env.CDK_DEFAULT_REGION,
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-  },
-});
-
-new AuthorizationService(stack, 'AuthService', {
+new AuthorizationServiceStack(app, 'AuthorizationServiceStack', {
   stage: 'dev'
 });
 
 app.synth();
+

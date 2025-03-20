@@ -3,42 +3,40 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-export const handler = async (event: APIGatewayTokenAuthorizerEvent): Promise<APIGatewayAuthorizerResult> => {
+export const basicAuthorizer = async (event: APIGatewayTokenAuthorizerEvent): Promise<APIGatewayAuthorizerResult> => {
   console.log('Event: ', JSON.stringify(event));
 
   try {
     // Check if Authorization header exists
     if (!event.authorizationToken) {
-      throw new Error('Unauthorized: No Authorization header');
+      return generatePolicy('user', 'Deny', event.methodArn);
     }
 
     // Extract credentials from Basic Auth header
-    const token = event.authorizationToken.split(' ')[1];
-    const credentials = Buffer.from(token, 'base64').toString('utf-8');
-    const [username, password] = credentials.split(':');
+    const authorizationHeader = event.authorizationToken;
+    const encodedCreds = authorizationHeader.split(' ')[1];
+    const buff = Buffer.from(encodedCreds, 'base64');
+    console.log(buff);
+    
+    const plainCreds = buff.toString('utf-8').split(':');
+    const username = plainCreds[0];
+    const password = plainCreds[1];
+
+    console.log('username:', username);
+    console.log('password:', password);
 
     // Get stored credentials from environment variables
-    const storedCredentials = process.env[username];
+    const storedPassword = process.env[username];
+    console.log('storedPassword:', storedPassword);
 
-    if (!storedCredentials || storedCredentials !== password) {
-      throw new Error('Forbidden: Invalid credentials');
-    }
+    const effect = (!storedPassword || storedPassword !== password) ? 'Deny' : 'Allow';
+    
+    // Generate policy
+    return generatePolicy('user', effect, event.methodArn);
 
-    // Generate policy if authentication is successful
-    return generatePolicy('user', 'Allow', event.methodArn);
-
-  } catch (error: unknown) {
+  } catch (error) {
     console.log('Error:', error);
-
-    if (error instanceof Error) {
-        if (error.message.includes('Unauthorized')) {
-          throw new Error('Unauthorized'); // Will result in 401
-        } else {
-          throw new Error('Forbidden'); // Will result in 403
-        }
-      } else {
-        throw new Error('Forbidden');
-      }
+    return generatePolicy('user', 'Deny', event.methodArn);
   }
 };
 
@@ -48,7 +46,7 @@ const generatePolicy = (
   resource: string
 ): APIGatewayAuthorizerResult => {
   return {
-    principalId,
+    principalId: principalId,
     policyDocument: {
       Version: '2012-10-17',
       Statement: [
