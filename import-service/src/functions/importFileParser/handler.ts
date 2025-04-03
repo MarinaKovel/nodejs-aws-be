@@ -56,32 +56,32 @@ export const importFileParser = async (event: S3Event) => {
       // Now process records sequentially
       logger.info(`Processing ${records.length} records`);
       
-      for (const data of records) {
-        try {
-          const messageBody = {
-            title: data.title,
-            description: data.description,
-            price: Number(data.price),
-            count: Number(data.count)
-          };
+      // for (const data of records) {
+      //   try {
+      //     const messageBody = {
+      //       title: data.title,
+      //       description: data.description,
+      //       price: Number(data.price),
+      //       count: Number(data.count)
+      //     };
 
-          logger.info('Sending message to SQS', { messageBody });
+      //     logger.info('Sending message to SQS', { messageBody });
 
-          const result = await sqsClient.send(new SendMessageCommand({
-            QueueUrl: 'https://sqs.eu-central-1.amazonaws.com/202533518997/catalogItemsQueue',
-            MessageBody: JSON.stringify(messageBody)
-          }));
+      //     const result = await sqsClient.send(new SendMessageCommand({
+      //       QueueUrl: 'https://sqs.eu-central-1.amazonaws.com/202533518997/catalogItemsQueue',
+      //       MessageBody: JSON.stringify(messageBody)
+      //     }));
 
-          logger.info('Successfully sent message to SQS', { 
-            messageId: result.MessageId,
-            data: messageBody 
-          });
-        } catch (error) {
-          logger.error('Error sending record to SQS', { 
-            error 
-          });
-        }
-      }
+      //     logger.info('Successfully sent message to SQS', { 
+      //       messageId: result.MessageId,
+      //       data: messageBody 
+      //     });
+      //   } catch (error) {
+      //     logger.error('Error sending record to SQS', { 
+      //       error 
+      //     });
+      //   }
+      // }
 
       // Move file after processing all records
       try {
