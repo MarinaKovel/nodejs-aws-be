@@ -19,5 +19,6 @@ COPY --from=builder /app/dist ./dist
 
 RUN npm install --only=production
 
-CMD ["node", "dist/server.js"]
 EXPOSE 5000
+
+CMD ["node", "dist/server.js"]
