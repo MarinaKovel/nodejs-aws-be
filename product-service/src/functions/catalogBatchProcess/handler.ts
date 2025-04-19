@@ -43,7 +43,8 @@ export const catalogBatchProcess = async (event: SQSEvent) => {
             id: productId,
             title: productData.title,
             description: productData.description || '',
-            price: productData.price
+            price: productData.price,
+            image: productData.image || ''
           }
         }));
 

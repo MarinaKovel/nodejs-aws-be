@@ -43,12 +43,13 @@ export const getProductsList = async (event: APIGatewayProxyEvent): Promise<APIG
     logger.info('Joining products with stocks');
     const joinedProducts = products.map(product => {
       const stock = stocks.find(s => s.product_id === product.id) || { count: 0 };
-      const { id, title, description, price } = product;
+      const { id, title, description, price, image } = product;
       return {
         id,
         title,
         description,
         price,
+        image,
         count: stock.count
       };
     });
