@@ -51,7 +51,7 @@ export const getProductsById = async (event: APIGatewayProxyEvent): Promise<APIG
     }
 
     logger.info('Product found:', {product: productResult.Item});
-    const { id, title, description, price } = productResult.Item as Product;
+    const { id, title, description, price, image } = productResult.Item as Product;
 
     logger.info('Fetching stock:', productId);
     const stockResult = await dynamodb.send(new GetCommand({
@@ -68,6 +68,7 @@ export const getProductsById = async (event: APIGatewayProxyEvent): Promise<APIG
       title,
       description,
       price,
+      image,
       count: stock.count
     };
     logger.info('Returning joined product:', joinedProduct);

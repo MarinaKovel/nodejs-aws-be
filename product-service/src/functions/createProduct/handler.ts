@@ -77,13 +77,14 @@ export const createProduct = async (event: APIGatewayProxyEvent): Promise<APIGat
 
     const productId = uuidv4();
     logger.info('Generated product ID:', productId);
-    const { title, description, price, count } = productData;
+    const { title, description, price, count, image } = productData;
 
     const product = {
       id: productId,
       title,
       description,
-      price
+      price,
+      image
     };
 
     const stock = {
